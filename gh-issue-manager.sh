@@ -1,7 +1,5 @@
 #!/bin/bash
-set -x
 set -euo pipefail
-IFS=
 
 # --- MCP Validation Header ---
 # [MCP:REQUIRED] shellcheck validation
@@ -13,9 +11,9 @@ IFS=
 # Initialize logging system
 log_init() {
     # Set default values if not provided
-    ENABLE_LOGGING=${ENABLE_LOGGING:-false}
-    LOG_LEVEL=${LOG_LEVEL:-INFO}
-    LOG_FILE=${LOG_FILE:-./logs/gh-issue-manager.log}
+    export ENABLE_LOGGING=${ENABLE_LOGGING:-false}
+    export LOG_LEVEL=${LOG_LEVEL:-INFO}
+    export LOG_FILE=${LOG_FILE:-./logs/gh-issue-manager.log}
     
     # Create log directory if logging is enabled
     if [ "$ENABLE_LOGGING" = "true" ]; then
@@ -23,6 +21,9 @@ log_init() {
         log_info "log_init" "Logging initialized - Level: $LOG_LEVEL, File: $LOG_FILE"
     fi
 }
+
+# Initialize logging when script is sourced
+log_init
 
 # Main logging function
 log_message() {
@@ -69,7 +70,16 @@ log_timing() {
     local end_time
     end_time=$(date +%s.%N)
     local duration
-    duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "N/A")
+    
+    # Try to calculate duration with bc, fallback to awk if bc is not available
+    if command -v bc >/dev/null 2>&1; then
+        duration=$(echo "$end_time - $start_time" | bc -l 2>/dev/null || echo "N/A")
+    elif command -v awk >/dev/null 2>&1; then
+        duration=$(awk "BEGIN {printf \"%.3f\", $end_time - $start_time}" 2>/dev/null || echo "N/A")
+    else
+        duration="N/A"
+    fi
+    
     log_info "$function_name" "Execution time: ${duration}s"
 }
 
@@ -534,7 +544,44 @@ main() {
     log_timing "main" "$start_time"
 }
 
+# Show usage information
+show_usage() {
+    echo "Usage: $0 [OPTIONS] PARENT_TITLE PARENT_BODY CHILD_TITLE CHILD_BODY"
+    echo ""
+    echo "Create GitHub issues with parent-child relationships"
+    echo ""
+    echo "Options:"
+    echo "  --update ISSUE_NUMBER [OPTIONS]    Update an existing issue"
+    echo "  --process-files ISSUE_NUMBER       Process 'Files to Create' section"
+    echo "  --help                             Show this help message"
+    echo ""
+    echo "Update options:"
+    echo "  --title TITLE                      Update issue title"
+    echo "  --body BODY                        Update issue body"
+    echo "  --state STATE                      Update issue state (open/closed)"
+    echo "  --add-label LABEL                  Add label to issue"
+    echo "  --remove-label LABEL               Remove label from issue"
+    echo "  --milestone MILESTONE              Set milestone"
+    echo ""
+    echo "Examples:"
+    echo "  $0 \"Parent Issue\" \"Description\" \"Child Issue\" \"Child description\""
+    echo "  $0 --update 123 --title \"New Title\" --add-label \"bug\""
+    echo "  $0 --process-files 456"
+    echo ""
+    echo "Environment variables:"
+    echo "  PROJECT_URL                        GitHub project URL for auto-assignment"
+    echo "  ENABLE_LOGGING                     Enable logging (true/false)"
+    echo "  LOG_LEVEL                          Log level (DEBUG/INFO/WARN/ERROR)"
+    echo "  LOG_FILE                           Log file path"
+}
+
 # Only run main if script is executed directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    # Handle help option
+    if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+        show_usage
+        exit 0
+    fi
+    
     main "$@"
 fi

@@ -31,12 +31,16 @@ case "$1" in
   "issue")
     case "$2" in
       "create")
-        echo '{"number": 123, "id": "test-id-123"}'
+        echo "https://github.com/test-owner/test-repo/issues/123"
         ;;
     esac
     ;;
   "api")
-    echo '{"data": {"addSubIssue": {"clientMutationId": "test"}}}'
+    if [[ "$*" == *"addSubIssue"* ]]; then
+      echo '{"data": {"addSubIssue": {"clientMutationId": "test"}}}'
+    else
+      echo "test-id-123"
+    fi
     ;;
   "project")
     echo "Added item to project"
@@ -44,24 +48,43 @@ case "$1" in
   "auth")
     echo "Logged in to github.com as test-user"
     ;;
+  "--version")
+    echo "gh version 2.40.0"
+    ;;
 esac
 EOF
 
   # Create mock jq command
   cat > "$temp_dir/jq" << 'EOF'
 #!/bin/bash
+# Mock jq to handle various queries
 case "$*" in
+  *".data.repository.issue.id"*)
+    echo "test-id-123"
+    ;;
   *".number"*)
     echo "123"
     ;;
   *".id"*)
     echo "test-id-123"
     ;;
+  "--version")
+    echo "jq-1.6"
+    ;;
+  *)
+    echo "test-output"
+    ;;
 esac
 EOF
 
   chmod +x "$temp_dir/gh" "$temp_dir/jq"
-  export PATH="$temp_dir:$PATH"
+  
+  # Verify the commands are executable
+  if [ ! -x "$temp_dir/gh" ] || [ ! -x "$temp_dir/jq" ]; then
+    echo "Error: Failed to create executable mock commands"
+    return 1
+  fi
+  
   echo "$temp_dir"
 }
 
@@ -91,6 +114,19 @@ test_mocked_full_workflow() {
   local mock_dir
   mock_dir=$(setup_mock_environment)
   
+  # Set PATH to include mock commands
+  local original_path="$PATH"
+  export PATH="$mock_dir:$PATH"
+  
+  # Verify mock commands are available
+  if ! command -v gh >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+    echo "❌ Mock commands not available in PATH"
+    export PATH="$original_path"
+    cleanup_mock_environment "$mock_dir"
+    ((TESTS_FAILED++))
+    return 1
+  fi
+  
   # Create temporary git repository
   local test_repo_dir
   test_repo_dir=$(mktemp -d)
@@ -100,10 +136,23 @@ test_mocked_full_workflow() {
   git remote add origin https://github.com/test-owner/test-repo.git >/dev/null 2>&1
   
   # Test full workflow with mocked commands
-  assert_success "Mocked full workflow" "$MAIN_SCRIPT" "Test Parent" "Parent body" "Test Child" "Child body"
+  echo "Testing full workflow with mocked commands..."
+  if "$MAIN_SCRIPT" "Test Parent" "Parent body" "Test Child" "Child body" >/dev/null 2>&1; then
+    echo "✅ Mocked full workflow: PASSED"
+    ((TESTS_PASSED++))
+  else
+    echo "❌ Mocked full workflow: FAILED"
+    echo "Debug: PATH=$PATH"
+    echo "Debug: gh location: $(which gh 2>/dev/null || echo 'not found')"
+    echo "Debug: jq location: $(which jq 2>/dev/null || echo 'not found')"
+    ((TESTS_FAILED++))
+  fi
   
   popd >/dev/null
   rm -rf "$test_repo_dir"
+  
+  # Restore original PATH
+  export PATH="$original_path"
   cleanup_mock_environment "$mock_dir"
 }
 
@@ -111,7 +160,7 @@ test_error_conditions_mocked() {
   echo -e "\n=== Mocked Error Condition Tests ==="
   
   local mock_dir
-  mock_dir=$(setup_mock_environment)
+  mock_dir=$(mktemp -d)
   
   # Create failing gh command
   cat > "$mock_dir/gh" << 'EOF'
@@ -120,13 +169,32 @@ case "$1" in
   "repo")
     exit 1  # Simulate repository access failure
     ;;
+  "--version")
+    echo "gh version 2.40.0"
+    ;;
   *)
     exit 1
     ;;
 esac
 EOF
   
-  chmod +x "$mock_dir/gh"
+  # Create working jq command for dependency check
+  cat > "$mock_dir/jq" << 'EOF'
+#!/bin/bash
+case "$*" in
+  "--version")
+    echo "jq-1.6"
+    ;;
+  *)
+    echo "test-output"
+    ;;
+esac
+EOF
+  
+  chmod +x "$mock_dir/gh" "$mock_dir/jq"
+  
+  local original_path="$PATH"
+  export PATH="$mock_dir:$PATH"
   
   local test_repo_dir
   test_repo_dir=$(mktemp -d)
@@ -143,7 +211,9 @@ EOF
   
   popd >/dev/null
   rm -rf "$test_repo_dir"
-  cleanup_mock_environment "$mock_dir"
+  
+  export PATH="$original_path"
+  rm -rf "$mock_dir"
 }
 
 test_individual_functions_mocked() {
@@ -151,6 +221,9 @@ test_individual_functions_mocked() {
   
   local mock_dir
   mock_dir=$(setup_mock_environment)
+  
+  local original_path="$PATH"
+  export PATH="$mock_dir:$PATH"
   
   # Source the script to test individual functions
   source "$MAIN_SCRIPT"
@@ -170,6 +243,8 @@ test_individual_functions_mocked() {
   # Test link_sub_issue (should work with mocked API)
   PARENT_ID="test-parent-id"
   CHILD_ID="test-child-id"
+  PARENT_ISSUE="123"
+  CHILD_ISSUE="124"
   assert_success "link_sub_issue with mocked API" link_sub_issue
   
   # Test add_to_project
@@ -182,6 +257,8 @@ test_individual_functions_mocked() {
   
   popd >/dev/null
   rm -rf "$test_repo_dir"
+  
+  export PATH="$original_path"
   cleanup_mock_environment "$mock_dir"
 }
 
@@ -191,8 +268,11 @@ run_mocked_tests() {
   echo "============================================================"
   
   test_mocked_full_workflow
+  echo "Completed test_mocked_full_workflow"
   test_error_conditions_mocked
+  echo "Completed test_error_conditions_mocked"
   test_individual_functions_mocked
+  echo "Completed test_individual_functions_mocked"
   
   # Test summary
   echo -e "\n=================================================="
@@ -212,5 +292,10 @@ run_mocked_tests() {
 
 # Run tests if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  run_mocked_tests
+  if run_mocked_tests; then
+    exit 0
+  else
+    exit 1
+  fi
+fi
 fi

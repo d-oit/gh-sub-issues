@@ -53,13 +53,12 @@ A robust tool for managing hierarchical issues with GitHub Projects using the of
 
 3. **Make scripts executable:**
    ```bash
-   chmod +x gh-issue-manager.sh gh-release-manager.sh
+   chmod +x gh-issue-manager.sh
    ```
 
 4. **Verify installation:**
    ```bash
    ./gh-issue-manager.sh --help
-   ./gh-release-manager.sh --help
    ```
 
 ### Configuration

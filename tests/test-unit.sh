@@ -78,11 +78,11 @@ assert_success() {
   # Run the command in a subshell to isolate set -e
   if ( "$@" >/dev/null 2>&1 ); then
     echo "✅ $test_name: PASSED"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
     return 0
   else
     echo "❌ $test_name: FAILED"
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
     return 1
   fi
 }
@@ -94,11 +94,11 @@ assert_failure() {
   # Run the command in a subshell to isolate set -e
   if ! ( "$@" >/dev/null 2>&1 ); then
     echo "✅ $test_name: PASSED (correctly failed)"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
     return 0
   else
     echo "❌ $test_name: FAILED (should have failed)"
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
     return 1
   fi
 }

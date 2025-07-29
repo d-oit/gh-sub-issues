@@ -19,7 +19,7 @@ analyze_coverage() {
   echo -e "\n🧪 Test coverage analysis:"
   
   # Check which functions are tested
-  local test_files=("$SCRIPT_DIR/test-gh-issue-manager.sh" "$SCRIPT_DIR/test-unit.sh" "$SCRIPT_DIR/test-enhanced-coverage.sh" "$SCRIPT_DIR/test-function-coverage.sh" "$SCRIPT_DIR/test-mocked-integration.sh")
+  local test_files=("$SCRIPT_DIR/test-gh-issue-manager.sh" "$SCRIPT_DIR/test-unit.sh" "$SCRIPT_DIR/test-enhanced-coverage.sh" "$SCRIPT_DIR/test-function-coverage.sh" "$SCRIPT_DIR/test-mocked-integration.sh" "$SCRIPT_DIR/test-logging-functions.sh")
   local covered_functions=()
   local uncovered_functions=()
   
