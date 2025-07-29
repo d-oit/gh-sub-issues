@@ -1,0 +1,58 @@
+# GitHub Actions Workflow Configuration
+# This file contains shared configuration for all workflows
+
+name: Workflow Configuration
+
+# This workflow doesn't run automatically - it's for documentation
+on:
+  workflow_dispatch:
+
+env:
+  # Global environment variables for all workflows
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.11'
+  
+  # GitHub CLI minimum version
+  GH_CLI_MIN_VERSION: '2.40.0'
+  
+  # Test configuration
+  TEST_TIMEOUT: '600'  # 10 minutes
+  
+  # Release configuration
+  DEFAULT_BRANCH: 'main'
+  RELEASE_BRANCH_PREFIX: 'release/'
+  
+  # Issue automation
+  STALE_DAYS: '60'
+  CLOSE_STALE_DAYS: '67'
+  
+  # Auto-merge configuration
+  AUTO_MERGE_LABEL: 'auto-merge'
+  REQUIRED_CHECKS: 'test,security'
+
+jobs:
+  config-info:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Display configuration
+      run: |
+        echo "# Workflow Configuration"
+        echo "========================"
+        echo ""
+        echo "## Environment Variables"
+        echo "- Node.js version: $NODE_VERSION"
+        echo "- Python version: $PYTHON_VERSION"
+        echo "- GitHub CLI minimum: $GH_CLI_MIN_VERSION"
+        echo "- Test timeout: $TEST_TIMEOUT seconds"
+        echo ""
+        echo "## Release Settings"
+        echo "- Default branch: $DEFAULT_BRANCH"
+        echo "- Release branch prefix: $RELEASE_BRANCH_PREFIX"
+        echo ""
+        echo "## Issue Management"
+        echo "- Stale after: $STALE_DAYS days"
+        echo "- Close stale after: $CLOSE_STALE_DAYS days"
+        echo ""
+        echo "## Auto-merge"
+        echo "- Auto-merge label: $AUTO_MERGE_LABEL"
+        echo "- Required checks: $REQUIRED_CHECKS"

@@ -1,0 +1,103 @@
+name: Issue Automation
+
+on:
+  issues:
+    types: [opened, closed, labeled, unlabeled]
+  issue_comment:
+    types: [created]
+
+jobs:
+  issue-management:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+    
+    - name: Auto-label new issues
+      if: github.event.action == 'opened'
+      run: |
+        issue_number="${{ github.event.issue.number }}"
+        issue_title="${{ github.event.issue.title }}"
+        issue_body="${{ github.event.issue.body }}"
+        
+        # Auto-label based on title/content
+        if echo "$issue_title" | grep -i "bug\|error\|fail\|broken"; then
+          gh issue edit "$issue_number" --add-label "bug"
+        fi
+        
+        if echo "$issue_title" | grep -i "feature\|enhancement\|add"; then
+          gh issue edit "$issue_number" --add-label "enhancement"
+        fi
+        
+        if echo "$issue_title" | grep -i "doc\|readme\|guide"; then
+          gh issue edit "$issue_number" --add-label "documentation"
+        fi
+        
+        if echo "$issue_title" | grep -i "test\|spec"; then
+          gh issue edit "$issue_number" --add-label "testing"
+        fi
+        
+        if echo "$issue_title" | grep -i "release\|version"; then
+          gh issue edit "$issue_number" --add-label "release"
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Handle release-related issues
+      if: contains(github.event.issue.labels.*.name, 'release')
+      run: |
+        issue_number="${{ github.event.issue.number }}"
+        
+        # Add to release milestone if it exists
+        current_milestone=$(gh api repos/${{ github.repository }}/milestones --jq '.[] | select(.state == "open") | .title' | head -1)
+        if [ -n "$current_milestone" ]; then
+          gh issue edit "$issue_number" --milestone "$current_milestone"
+        fi
+        
+        # Add release project board if configured
+        echo "Issue #$issue_number tagged for release tracking"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update project boards
+      if: github.event.action == 'closed' || github.event.action == 'labeled'
+      run: |
+        issue_number="${{ github.event.issue.number }}"
+        
+        # If issue is closed and has fixed-in-next-release label, prepare for release
+        if [ "${{ github.event.action }}" = "closed" ] && echo '${{ toJson(github.event.issue.labels) }}' | jq -r '.[].name' | grep -q "fixed-in-next-release"; then
+          echo "Issue #$issue_number closed and marked for next release"
+          
+          # Could trigger release preparation workflow here
+          # gh workflow run release.yml --ref main
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Handle sub-issue creation requests
+      if: contains(github.event.comment.body, '/create-sub-issues')
+      run: |
+        comment_body="${{ github.event.comment.body }}"
+        issue_number="${{ github.event.issue.number }}"
+        
+        # Extract sub-issue information from comment
+        # Format: /create-sub-issues "Title 1" "Body 1" "Title 2" "Body 2"
+        
+        echo "Sub-issue creation requested for issue #$issue_number"
+        echo "Comment: $comment_body"
+        
+        # This would integrate with the gh-issue-manager.sh script
+        # chmod +x gh-issue-manager.sh
+        # Parse the comment and create sub-issues accordingly
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,117 @@
+name: Automated Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      pre_release:
+        description: 'Create pre-release'
+        required: false
+        default: false
+        type: boolean
+      pre_release_tag:
+        description: 'Pre-release tag (e.g., alpha.1, beta.2)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+        
+    - name: Verify GitHub CLI
+      run: |
+        gh --version
+        gh auth status
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Run comprehensive tests
+      run: |
+        chmod +x tests/run-all-tests.sh
+        ./tests/run-all-tests.sh
+    
+    - name: Create release (patch)
+      if: ${{ inputs.version_bump == 'patch' && !inputs.pre_release }}
+      run: |
+        chmod +x gh-release-manager.sh
+        ./gh-release-manager.sh -p
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create release (minor)
+      if: ${{ inputs.version_bump == 'minor' && !inputs.pre_release }}
+      run: |
+        chmod +x gh-release-manager.sh
+        ./gh-release-manager.sh -m
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create release (major)
+      if: ${{ inputs.version_bump == 'major' && !inputs.pre_release }}
+      run: |
+        chmod +x gh-release-manager.sh
+        ./gh-release-manager.sh -M
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create pre-release (alpha)
+      if: ${{ inputs.pre_release && contains(inputs.pre_release_tag, 'alpha') }}
+      run: |
+        chmod +x gh-release-manager.sh
+        ./gh-release-manager.sh -a ${{ inputs.pre_release_tag }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create pre-release (beta)
+      if: ${{ inputs.pre_release && contains(inputs.pre_release_tag, 'beta') }}
+      run: |
+        chmod +x gh-release-manager.sh
+        ./gh-release-manager.sh -b ${{ inputs.pre_release_tag }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Close fixed issues
+      run: |
+        # Get issues marked as fixed-in-next-release
+        gh issue list --label "fixed-in-next-release" --state open --json number,title | \
+        jq -r '.[] | .number' | \
+        while read issue_number; do
+          if [ -n "$issue_number" ]; then
+            echo "Closing issue #$issue_number"
+            gh issue close "$issue_number" --comment "Fixed in latest release"
+          fi
+        done
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update project boards
+      run: |
+        # Update any linked project boards
+        echo "Updating project boards with release information..."
+        # This can be extended based on specific project board requirements
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

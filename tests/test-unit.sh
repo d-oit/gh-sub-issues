@@ -270,11 +270,13 @@ run_unit_tests() {
 }
 
 # Run tests if script is executed directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  run_unit_tests
-fi	' "title2" "body2"
   assert_failure "Newline-only third arg" "$MAIN_SCRIPT" "title1" "body1" ""
 }
+
+# Run tests if script is executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  run_unit_tests
+fi
 
 test_dependency_checking_mocked() {
   echo -e "\n=== Unit Tests: Dependency Checking (Mocked) ==="

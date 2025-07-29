@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2 (2025-07-29)
+- No significant changes.
+
+## v0.1.1 (2025-07-29)
+- No significant changes.
+
 ## v0.1.1 (2025-07-29)
 - No significant changes.
 

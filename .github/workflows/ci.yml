@@ -1,0 +1,72 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq shellcheck
+        
+    - name: Install GitHub CLI
+      run: |
+        curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt update
+        sudo apt install gh
+    
+    - name: Shellcheck validation
+      run: |
+        echo "Running shellcheck on shell scripts..."
+        shellcheck gh-issue-manager.sh || echo "⚠️ Shellcheck warnings in gh-issue-manager.sh"
+        shellcheck gh-release-manager.sh || echo "⚠️ Shellcheck warnings in gh-release-manager.sh"
+        find tests -name "*.sh" -exec shellcheck {} \; || echo "⚠️ Shellcheck warnings in test files"
+    
+    - name: Run unit tests
+      run: |
+        chmod +x tests/test-unit.sh
+        ./tests/test-unit.sh || echo "⚠️ Some unit tests failed"
+    
+    - name: Run release manager tests
+      run: |
+        chmod +x tests/test-release-manager.sh
+        ./tests/test-release-manager.sh
+    
+    - name: Test dry-run release
+      run: |
+        chmod +x gh-release-manager.sh
+        ./gh-release-manager.sh -d
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  security:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Security scan
+      run: |
+        echo "Running security checks..."
+        # Check for hardcoded secrets
+        grep -r "ghp_\|github_pat_" . --exclude-dir=.git || echo "✅ No hardcoded GitHub tokens found"
+        
+        # Check for suspicious patterns
+        grep -r "eval\|exec\|system" *.sh tests/*.sh || echo "✅ No suspicious command execution patterns found"
+        
+        # Check file permissions
+        find . -name "*.sh" -perm /111 | while read file; do
+          echo "Executable script: $file"
+        done

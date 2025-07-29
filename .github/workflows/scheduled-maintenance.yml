@@ -1,0 +1,101 @@
+name: Scheduled Maintenance
+
+on:
+  schedule:
+    # Run every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+    
+    - name: Clean up stale issues
+      run: |
+        echo "Checking for stale issues..."
+        
+        # Find issues that haven't been updated in 60 days
+        cutoff_date=$(date -d "60 days ago" --iso-8601)
+        
+        gh issue list --state open --json number,title,updatedAt --jq ".[] | select(.updatedAt < \"$cutoff_date\") | .number" | \
+        while read issue_number; do
+          if [ -n "$issue_number" ]; then
+            echo "Adding stale label to issue #$issue_number"
+            gh issue edit "$issue_number" --add-label "stale"
+            gh issue comment "$issue_number" --body "This issue has been automatically marked as stale because it has not had recent activity. It will be closed if no further activity occurs within 7 days."
+          fi
+        done
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Close very stale issues
+      run: |
+        echo "Checking for very stale issues to close..."
+        
+        # Find stale issues that haven't been updated in 67 days (60 + 7)
+        cutoff_date=$(date -d "67 days ago" --iso-8601)
+        
+        gh issue list --state open --label stale --json number,title,updatedAt --jq ".[] | select(.updatedAt < \"$cutoff_date\") | .number" | \
+        while read issue_number; do
+          if [ -n "$issue_number" ]; then
+            echo "Closing stale issue #$issue_number"
+            gh issue close "$issue_number" --comment "This issue was automatically closed due to inactivity."
+          fi
+        done
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Update dependencies documentation
+      run: |
+        echo "Checking for dependency updates..."
+        
+        # Check GitHub CLI version
+        current_gh_version=$(gh --version | head -1 | awk '{print $3}')
+        echo "Current GitHub CLI version: $current_gh_version"
+        
+        # Check if README mentions specific versions that might need updating
+        if grep -q "GitHub CLI v2.40+" README.md; then
+          echo "✅ GitHub CLI version requirement is up to date"
+        else
+          echo "⚠️ Consider updating GitHub CLI version requirements"
+        fi
+    
+    - name: Generate maintenance report
+      run: |
+        echo "# Maintenance Report - $(date)" > maintenance-report.md
+        echo "" >> maintenance-report.md
+        
+        echo "## Issue Statistics" >> maintenance-report.md
+        echo "- Open issues: $(gh issue list --state open --json number | jq length)" >> maintenance-report.md
+        echo "- Closed issues: $(gh issue list --state closed --limit 100 --json number | jq length)+" >> maintenance-report.md
+        echo "- Stale issues: $(gh issue list --state open --label stale --json number | jq length)" >> maintenance-report.md
+        echo "" >> maintenance-report.md
+        
+        echo "## Recent Activity" >> maintenance-report.md
+        echo "### Recent Releases" >> maintenance-report.md
+        gh release list --limit 5 | while read line; do
+          echo "- $line" >> maintenance-report.md
+        done
+        echo "" >> maintenance-report.md
+        
+        echo "### Recent Issues" >> maintenance-report.md
+        gh issue list --state all --limit 10 --json number,title,state,createdAt | \
+        jq -r '.[] | "- #\(.number): \(.title) (\(.state)) - \(.createdAt[:10])"' >> maintenance-report.md
+        
+        echo "Maintenance report generated:"
+        cat maintenance-report.md
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
