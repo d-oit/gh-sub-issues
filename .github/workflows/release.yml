@@ -1,10 +1,10 @@
-name: Automated Release
+name: Release
 
 on:
   workflow_dispatch:
     inputs:
-      version_bump:
-        description: 'Version bump type'
+      version-bump:
+        description: 'Version bump type (major, minor, or patch)'
         required: true
         default: 'patch'
         type: choice
@@ -12,106 +12,147 @@ on:
           - patch
           - minor
           - major
-      pre_release:
-        description: 'Create pre-release'
-        required: false
-        default: false
-        type: boolean
-      pre_release_tag:
-        description: 'Pre-release tag (e.g., alpha.1, beta.2)'
-        required: false
-        type: string
+
+permissions:
+  contents: write
+  issues: write
 
 jobs:
-  release:
+  test:
+    name: Run Tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Setup dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y jq
-        
-    - name: Verify GitHub CLI
-      run: |
-        gh --version
-        gh auth status
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Run comprehensive tests
-      run: |
-        chmod +x tests/run-all-tests.sh
-        ./tests/run-all-tests.sh
-    
-    - name: Create release (patch)
-      if: ${{ inputs.version_bump == 'patch' && !inputs.pre_release }}
-      run: |
-        chmod +x gh-release-manager.sh
-        ./gh-release-manager.sh -p
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Create release (minor)
-      if: ${{ inputs.version_bump == 'minor' && !inputs.pre_release }}
-      run: |
-        chmod +x gh-release-manager.sh
-        ./gh-release-manager.sh -m
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Create release (major)
-      if: ${{ inputs.version_bump == 'major' && !inputs.pre_release }}
-      run: |
-        chmod +x gh-release-manager.sh
-        ./gh-release-manager.sh -M
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Create pre-release (alpha)
-      if: ${{ inputs.pre_release && contains(inputs.pre_release_tag, 'alpha') }}
-      run: |
-        chmod +x gh-release-manager.sh
-        ./gh-release-manager.sh -a ${{ inputs.pre_release_tag }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Create pre-release (beta)
-      if: ${{ inputs.pre_release && contains(inputs.pre_release_tag, 'beta') }}
-      run: |
-        chmod +x gh-release-manager.sh
-        ./gh-release-manager.sh -b ${{ inputs.pre_release_tag }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Close fixed issues
-      run: |
-        # Get issues marked as fixed-in-next-release
-        gh issue list --label "fixed-in-next-release" --state open --json number,title | \
-        jq -r '.[] | .number' | \
-        while read issue_number; do
-          if [ -n "$issue_number" ]; then
-            echo "Closing issue #$issue_number"
-            gh issue close "$issue_number" --comment "Fixed in latest release"
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run all tests
+        run: ./tests/run-all-tests.sh
+
+  release:
+    name: Create Release
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required for git-cliff
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine next version
+        id: version
+        run: |
+          # Get the latest tag
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          latest_version=${latest_tag#v}
+
+          # Split version into components
+          IFS='.' read -r -a version_parts <<< "$latest_version"
+          major=${version_parts[0]}
+          minor=${version_parts[1]}
+          patch=${version_parts[2]}
+
+          # Bump version based on input
+          case "${{ github.event.inputs.version-bump }}" in
+            major)
+              major=$((major + 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              minor=$((minor + 1))
+              patch=0
+              ;;
+            patch)
+              patch=$((patch + 1))
+              ;;
+          esac
+
+          new_version="v$major.$minor.$patch"
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: release_notes
+        uses: orhun/git-cliff-action@v2
+        with:
+          config: |
+            [changelog]
+            header = """
+            # Changelog
+            """
+            body = """
+            {% if version %}
+                ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+            {% else %}
+                ## [unreleased]
+            {% endif %}
+            {% for group, commits in commits | group_by(attribute="group") %}
+                ### {{ group | upper_first }}
+                {% for commit in commits %}
+                    - {{ commit.message | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/${{ github.repository }}/commit/{{ commit.id }}))
+                {% endfor %}
+            {% endfor %}
+            """
+            footer = ""
+          tag: ${{ steps.version.outputs.new_version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update CHANGELOG.md
+        run: |
+          echo "${{ steps.release_notes.outputs.content }}" > CHANGELOG.md
+
+      - name: Commit and push CHANGELOG.md
+        run: |
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for ${{ steps.version.outputs.new_version }}"
+          git push
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.new_version }}
+          name: ${{ steps.version.outputs.new_version }}
+          body: ${{ steps.release_notes.outputs.content }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Process and close issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.content }}
+          RELEASE_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          #!/bin/bash
+          set -euo pipefail
+
+          # Extract issue numbers from release notes
+          issue_numbers=$(echo "$RELEASE_NOTES" | grep -oP '#\d+' | sed 's/#//' | sort -u)
+
+          if [ -z "$issue_numbers" ]; then
+            echo "No issues found in release notes."
+            exit 0
           fi
-        done
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Update project boards
-      run: |
-        # Update any linked project boards
-        echo "Updating project boards with release information..."
-        # This can be extended based on specific project board requirements
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          echo "Found issues: $issue_numbers"
+
+          for issue_number in $issue_numbers; do
+            echo "Processing issue #$issue_number"
+
+            # Check if issue is open
+            issue_state=$(gh issue view "$issue_number" --json state -q .state)
+            if [ "$issue_state" != "OPEN" ]; then
+              echo "Issue #$issue_number is not open, skipping."
+              continue
+            fi
+
+            # Add label, comment and close issue
+            gh issue edit "$issue_number" --add-label "released"
+            gh issue comment "$issue_number" --body "🎉 This issue has been released in version $RELEASE_VERSION."
+            gh issue close "$issue_number"
+
+            echo "Processed issue #$issue_number"
+          done

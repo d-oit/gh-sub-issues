@@ -85,7 +85,6 @@ validate_input() {
         
         if [ -z "$var" ] || [[ "$var" =~ ^[[:space:]]*$ ]]; then
             log_error "validate_input" "Argument is empty or contains only whitespace"
-            echo "Error: All arguments must be non-empty and contain non-whitespace characters" >&2
             return 1
         fi
     done
