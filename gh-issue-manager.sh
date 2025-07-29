@@ -241,7 +241,8 @@ create_issues() {
 }
 
 link_sub_issue() {
-    local start_time=$(date +%s.%N)
+    local start_time
+    start_time=$(date +%s.%N)
     log_info "link_sub_issue" "Linking child issue #$CHILD_ISSUE to parent #$PARENT_ISSUE"
     log_debug "link_sub_issue" "Parent ID: $PARENT_ID, Child ID: $CHILD_ID"
     
@@ -265,7 +266,8 @@ mutation {
 }
 
 add_to_project() {
-    local start_time=$(date +%s.%N)
+    local start_time
+    start_time=$(date +%s.%N)
     log_debug "add_to_project" "PROJECT_URL: ${PROJECT_URL:-'not set'}"
     
     if [ -n "${PROJECT_URL:-}" ]; then
@@ -309,7 +311,8 @@ add_to_project() {
 
 # Function to update a GitHub issue
 update_issue() {
-    local start_time=$(date +%s.%N)
+    local start_time
+    start_time=$(date +%s.%N)
     log_debug "update_issue" "Updating issue #$1..."
 
     local issue_number="$1"
@@ -414,7 +417,8 @@ process_files_to_create_in_issue() {
         fi
 
         if [ -f "$filename" ]; then
-            local timestamp=$(date +%Y%m%d_%H%M%S)
+            local timestamp
+            timestamp=$(date +%Y%m%d_%H%M%S)
             local dirname
             dirname=$(dirname "$filename")
             local basename

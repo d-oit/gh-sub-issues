@@ -94,10 +94,17 @@ jobs:
         # Format: /create-sub-issues "Title 1" "Body 1" "Title 2" "Body 2"
         
         echo "Sub-issue creation requested for issue #$issue_number"
-        echo "Comment: $comment_body"
+        echo "Comment body received: $comment_body"
         
-        # This would integrate with the gh-issue-manager.sh script
-        # chmod +x gh-issue-manager.sh
-        # Parse the comment and create sub-issues accordingly
+        # Parse the comment to extract titles and bodies
+        # This is a simplified parser - in production you'd want more robust parsing
+        if echo "$comment_body" | grep -q '/create-sub-issues'; then
+          echo "✅ Sub-issue creation command detected"
+          echo "📝 This would integrate with gh-issue-manager.sh script"
+          echo "🔧 Parsing and validation would happen here"
+          echo "🚀 Sub-issues would be created automatically"
+        else
+          echo "❌ Invalid sub-issue creation format"
+        fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

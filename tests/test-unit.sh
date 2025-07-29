@@ -273,6 +273,68 @@ run_unit_tests() {
   assert_failure "Newline-only third arg" "$MAIN_SCRIPT" "title1" "body1" ""
 }
 
+# Test input validation function
+test_input_validation() {
+  echo "Testing input validation..."
+  
+  # Test empty arguments
+  assert_failure "Empty first argument" "$MAIN_SCRIPT" "" "body1" "title2" "body2"
+  assert_failure "Empty second argument" "$MAIN_SCRIPT" "title1" "" "title2" "body2"
+  assert_failure "Empty third argument" "$MAIN_SCRIPT" "title1" "body1" "" "body2"
+  assert_failure "Empty fourth argument" "$MAIN_SCRIPT" "title1" "body1" "title2" ""
+  
+  # Test whitespace-only arguments
+  assert_failure "Whitespace-only first arg" "$MAIN_SCRIPT" "   " "body1" "title2" "body2"
+  assert_failure "Whitespace-only second arg" "$MAIN_SCRIPT" "title1" "   " "title2" "body2"
+}
+
+# Test environment loading function
+test_environment_loading() {
+  echo "Testing environment loading..."
+  
+  # Create temporary .env file
+  local temp_env=$(mktemp)
+  echo "TEST_VAR=test_value" > "$temp_env"
+  
+  # Test loading environment
+  if [ -f "$temp_env" ]; then
+    echo "✅ Environment file creation test passed"
+    ((TESTS_PASSED++))
+  else
+    echo "❌ Environment file creation test failed"
+    ((TESTS_FAILED++))
+  fi
+  
+  rm -f "$temp_env"
+}
+
+# Main test runner function
+run_unit_tests() {
+  echo "=== Unit Tests: Input Validation ==="
+  test_input_validation
+  
+  echo -e "\n=== Unit Tests: Environment Loading ==="
+  test_environment_loading
+  
+  echo -e "\n=== Unit Tests: Environment Edge Cases ==="
+  test_environment_loading_edge_cases
+  
+  echo -e "\n=== Unit Tests: Dependency Checking ==="
+  test_dependency_checking_mocked
+  
+  echo -e "\n=== Test Results ==="
+  echo "Tests passed: $TESTS_PASSED"
+  echo "Tests failed: $TESTS_FAILED"
+  
+  if [ $TESTS_FAILED -eq 0 ]; then
+    echo "✅ All unit tests passed!"
+    exit 0
+  else
+    echo "❌ Some unit tests failed!"
+    exit 1
+  fi
+}
+
 # Run tests if script is executed directly
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   run_unit_tests

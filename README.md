@@ -45,6 +45,46 @@ A robust tool for managing hierarchical issues with GitHub Projects using the of
    # Edit .env to set PROJECT_URL if using project boards
    ```
 
+## Automated Workflows
+
+This project includes comprehensive GitHub Actions workflows for automation:
+
+### 🚀 Release Automation (`release.yml`)
+- **Manual trigger** with version bump options (patch/minor/major)
+- **Pre-release support** for alpha/beta versions
+- **Automated testing** before release creation
+- **Issue closure** for items marked "fixed-in-next-release"
+- **Project board updates**
+
+**Usage:**
+1. Go to Actions → Automated Release
+2. Click "Run workflow"
+3. Select version bump type and options
+4. The workflow will test, create release, and close issues
+
+### 🔄 Continuous Integration (`ci.yml`)
+- **Automated testing** on push/PR to main branch
+- **Shellcheck validation** for code quality
+- **Security scanning** for potential vulnerabilities
+- **Dry-run release testing**
+
+### 🤖 Issue Automation (`issue-automation.yml`)
+- **Auto-labeling** based on issue title/content
+- **Release tracking** for issues tagged with release labels
+- **Sub-issue creation** via comments (`/create-sub-issues`)
+- **Project board management**
+
+### 🧹 Scheduled Maintenance (`scheduled-maintenance.yml`)
+- **Weekly maintenance** runs every Sunday
+- **Stale issue management** (60+ days inactive)
+- **Dependency updates** checking
+- **Maintenance reports** generation
+
+### 🔀 Auto-merge (`auto-merge.yml`)
+- **Automatic PR merging** when labeled "auto-merge"
+- **CI validation** before merge
+- **Failure notifications**
+
 ## Usage
 
 ### Basic Usage

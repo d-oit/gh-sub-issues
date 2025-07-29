@@ -483,7 +483,8 @@ update_changelog() {
 
     local next_version="$1"
     local changelog_entries="$2"
-    local current_date=$(date +"%Y-%m-%d")
+    local current_date
+    current_date=$(date +"%Y-%m-%d")
 
     local changelog_header="# Changelog\n\n"
     local new_section
