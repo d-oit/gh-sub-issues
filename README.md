@@ -4,8 +4,10 @@ A robust tool for managing hierarchical issues with GitHub Projects using the of
 
 ## Features
 
-- ✅ **Parent/child issue relationships** using GitHub's sub-issues API
+- ✅ **Automates sub-issue creation** - Handles GitHub's complex GraphQL API requirements since sub-issues aren't directly supported in the CLI
+- ✅ **Simplifies hierarchical workflows** - Single command creates both parent and child issues with proper linking
 - ✅ **Automatic project board linking** with configurable project URLs
+- ✅ **Optional comprehensive logging** - Track operations, debug issues, and monitor performance
 - ✅ **Environment-based configuration** via `.env` files
 - ✅ **CLI-based workflow** with comprehensive error handling
 - ✅ **Input validation** with whitespace and empty argument checking
@@ -56,6 +58,23 @@ A robust tool for managing hierarchical issues with GitHub Projects using the of
   "Implement POST /api/auth/login endpoint with validation"
 ```
 
+### With Logging Enabled
+```bash
+# Enable logging with INFO level
+ENABLE_LOGGING=true LOG_LEVEL=INFO ./gh-issue-manager.sh \
+  "Implement User Authentication" \
+  "Add OAuth2 authentication system with JWT tokens" \
+  "Create Login API Endpoint" \
+  "Implement POST /api/auth/login endpoint with validation"
+
+# Enable debug logging for troubleshooting
+ENABLE_LOGGING=true LOG_LEVEL=DEBUG ./gh-issue-manager.sh \
+  "Debug Issue Creation" \
+  "Test issue for debugging purposes" \
+  "Debug Child Issue" \
+  "Child issue for testing"
+```
+
 ## Configuration
 
 ### Environment Variables (.env)
@@ -65,6 +84,11 @@ PROJECT_URL=https://github.com/orgs/your-org/projects/1
 
 # Optional: GitHub token (usually not needed if gh CLI is authenticated)
 GITHUB_TOKEN=your_personal_access_token
+
+# Optional: Logging configuration
+ENABLE_LOGGING=true                    # Enable/disable logging (default: false)
+LOG_LEVEL=INFO                         # Log level: DEBUG, INFO, WARN, ERROR (default: INFO)
+LOG_FILE=./logs/gh-issue-manager.log   # Log file path (default: ./logs/gh-issue-manager.log)
 ```
 
 ### Project Board Setup
@@ -72,6 +96,83 @@ GITHUB_TOKEN=your_personal_access_token
 2. Set up columns: **Backlog** → **In Progress** → **Done**
 3. Copy the project URL to your `.env` file
 4. Issues will be automatically added to the project
+
+## Logging
+
+The GitHub Issue Manager includes optional comprehensive logging to help with debugging, monitoring, and audit trails.
+
+### Logging Configuration
+
+Configure logging through environment variables:
+
+```bash
+# Enable logging (default: false)
+ENABLE_LOGGING=true
+
+# Set log level (default: INFO)
+LOG_LEVEL=DEBUG    # Most verbose: DEBUG, INFO, WARN, ERROR
+LOG_LEVEL=INFO     # Standard: INFO, WARN, ERROR  
+LOG_LEVEL=WARN     # Warnings and errors only: WARN, ERROR
+LOG_LEVEL=ERROR    # Errors only: ERROR
+
+# Set log file path (default: ./logs/gh-issue-manager.log)
+LOG_FILE=./logs/gh-issue-manager.log
+```
+
+### Log Levels
+
+- **DEBUG** - Detailed debugging information including API calls, timing, and internal operations
+- **INFO** - General operational information about successful operations and progress
+- **WARN** - Warning messages for non-critical issues (also output to console)
+- **ERROR** - Critical failures and errors (also output to console)
+
+### Log Format
+
+```
+[TIMESTAMP] [LEVEL] [FUNCTION] MESSAGE
+[2025-01-15 10:30:45] [INFO] [create_issues] Creating parent issue: 'Feature Implementation'
+[2025-01-15 10:30:46] [DEBUG] [create_issues] GitHub API call: gh issue create --title...
+[2025-01-15 10:30:47] [INFO] [create_issues] Parent issue created: #123
+[2025-01-15 10:30:48] [INFO] [create_issues] Execution time: 2.145s
+```
+
+### Usage Examples
+
+```bash
+# Basic logging - INFO level
+ENABLE_LOGGING=true ./gh-issue-manager.sh "Title" "Body" "Child" "Body"
+
+# Debug logging for troubleshooting
+ENABLE_LOGGING=true LOG_LEVEL=DEBUG ./gh-issue-manager.sh "Title" "Body" "Child" "Body"
+
+# Custom log file location
+ENABLE_LOGGING=true LOG_FILE=/var/log/github-issues.log ./gh-issue-manager.sh "Title" "Body" "Child" "Body"
+
+# Set in .env file for persistent configuration
+echo "ENABLE_LOGGING=true" >> .env
+echo "LOG_LEVEL=INFO" >> .env
+./gh-issue-manager.sh "Title" "Body" "Child" "Body"
+```
+
+### What Gets Logged
+
+- **Function execution** - Entry, exit, and timing for all major functions
+- **GitHub API operations** - Issue creation, sub-issue linking, project assignments
+- **Performance metrics** - Execution time for each operation and total runtime
+- **Error details** - Comprehensive error information with context
+- **Configuration loading** - Environment and .env file processing
+- **Validation results** - Input validation and dependency checks
+
+### Log File Management
+
+- **Automatic directory creation** - Log directory created if it doesn't exist
+- **Append mode** - New executions append to existing log file
+- **Manual rotation** - Rotate logs manually when needed:
+
+```bash
+# Rotate log file
+mv logs/gh-issue-manager.log logs/gh-issue-manager-$(date +%Y%m%d).log
+```
 
 ## Error Handling
 
@@ -111,6 +212,23 @@ Run the comprehensive test suite:
    - Always run from within a Git repository
    - Ensure GitHub CLI is authenticated
    - Verify project URLs before use
+
+## Why This Script?
+
+GitHub's CLI (`gh`) doesn't natively support sub-issue creation. Without this script, you would need to manually:
+
+1. Create parent issue
+2. Create child issue
+3. Use GraphQL API directly to link them
+4. Handle API authentication and error checking
+5. Manage project board assignments separately
+
+This script automates all these steps in a single command while ensuring:
+
+- ✅ Proper error handling at each stage
+- ✅ Input validation and sanitization
+- ✅ Environment configuration management
+- ✅ Project board integration
 
 ## Technical Implementation
 
@@ -172,11 +290,24 @@ The script is modularized into testable functions:
 
 ### Debug Mode
 
-Run with verbose output:
+Multiple debugging approaches available:
+
 ```bash
+# Method 1: Enable logging with DEBUG level
+ENABLE_LOGGING=true LOG_LEVEL=DEBUG ./gh-issue-manager.sh "Parent" "Body" "Child" "Body"
+
+# Method 2: Shell debug mode
 set -x  # Enable debug mode
 ./gh-issue-manager.sh "Parent" "Body" "Child" "Body"
 set +x  # Disable debug mode
+
+# Method 3: Combined logging and shell debug
+set -x
+ENABLE_LOGGING=true LOG_LEVEL=DEBUG ./gh-issue-manager.sh "Parent" "Body" "Child" "Body"
+set +x
+
+# Check log file for detailed execution trace
+cat logs/gh-issue-manager.log
 ```
 
 ## Contributing
@@ -195,5 +326,3 @@ set +x  # Disable debug mode
    - Maintain >80% function coverage
    - Add both unit and integration tests
    - Include error scenario testing
-
-![GitHub Sub-Issue Relationship](https://docs.github.com/assets/cb-138303/images/help/issues/sub-issues.png)

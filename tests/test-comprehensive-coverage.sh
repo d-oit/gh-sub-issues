@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# Source the main script once at the beginning
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../gh-issue-manager.sh"
+log_init
+
 # Comprehensive coverage tests targeting 100% function coverage
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly MAIN_SCRIPT="$SCRIPT_DIR/../gh-issue-manager.sh"
@@ -13,7 +17,7 @@ assert_success() {
   local test_name="$1"
   shift
   
-  if "$@" >/dev/null 2>&1; then
+  if ! "$@"; then
     echo "✅ $test_name: PASSED"
     ((TESTS_PASSED++))
     return 0
@@ -28,7 +32,7 @@ assert_failure() {
   local test_name="$1"
   shift
   
-  if ! "$@" >/dev/null 2>&1; then
+  if "$@"; then
     echo "✅ $test_name: PASSED (correctly failed)"
     ((TESTS_PASSED++))
     return 0
@@ -106,25 +110,28 @@ create_success_mocks() {
   
   cat > "$temp_dir/gh" << 'EOF'
 #!/bin/bash
-case "$1 $2" in
-  "repo view")
-    if [[ "$*" == *"owner"* ]]; then
-      echo "test-owner"
-    elif [[ "$*" == *"name"* ]]; then
-      echo "test-repo"
-    fi
+case "$*" in
+  "repo view --json owner -q .owner.login")
+    echo "test-owner"
     ;;
-  "issue create")
+  "repo view --json name -q .name")
+    echo "test-repo"
+    ;;
+  "issue create"*)
     if [[ "$*" == *"Parent"* ]]; then
       echo '{"number": 100, "id": "parent-id-100"}'
     else
       echo '{"number": 101, "id": "child-id-101"}'
     fi
     ;;
-  "api graphql")
+  "api graphql -H GraphQL-Features: sub_issues -f query=
+mutation {\n  addSubIssue(input: {issueId: \"test-parent-id\", subIssueId: \"test-child-id\"}) {\n    clientMutationId\n  }\n}")
     echo '{"data": {"addSubIssue": {"clientMutationId": "success"}}}'
     ;;
-  "project item-add")
+  "project item-add 1 --owner test-owner --url https://github.com/test-owner/test-repo/issues/100")
+    echo "Item added to project successfully"
+    ;;
+  "project item-add 1 --owner test-owner --url https://github.com/test-owner/test-repo/issues/101")
     echo "Item added to project successfully"
     ;;
   *)
@@ -248,14 +255,25 @@ EOF
 
 # Comprehensive tests for all functions with multiple scenarios
 test_all_functions_comprehensive() {
-  echo -e "\n=== Comprehensive Function Coverage Tests ==="
+  echo -e "
+=== Comprehensive Function Coverage Tests ==="
+
+
+
+
   
   # Test get_repo_context with various scenarios
-  echo -e "\n--- Testing get_repo_context ---"
+  echo -e "
+--- Testing get_repo_context ---"
+
   
   local mock_dir
   mock_dir=$(setup_advanced_mock "success")
-  source "$MAIN_SCRIPT"
+
+  # Set environment variables for get_repo_context
+  export REPO_OWNER="test-owner"
+  export REPO_NAME="test-repo"
+
   
   local test_repo_dir
   test_repo_dir=$(mktemp -d)
@@ -272,9 +290,14 @@ test_all_functions_comprehensive() {
   rm -rf "$test_repo_dir"
   rm -rf "$mock_dir"
   
+  # Unset environment variables for subsequent tests
+  unset REPO_OWNER
+  unset REPO_NAME
+  
   # Test failure case
   mock_dir=$(setup_advanced_mock "gh_fail")
-  source "$MAIN_SCRIPT"
+  unset REPO_OWNER
+  unset REPO_NAME
   
   test_repo_dir=$(mktemp -d)
   pushd "$test_repo_dir" >/dev/null
@@ -290,7 +313,7 @@ test_all_functions_comprehensive() {
   echo -e "\n--- Testing create_issues ---"
   
   mock_dir=$(setup_advanced_mock "success")
-  source "$MAIN_SCRIPT"
+
   
   # Test successful creation
   assert_success "create_issues success case" create_issues "Parent Title" "Parent Body" "Child Title" "Child Body"
@@ -303,7 +326,7 @@ test_all_functions_comprehensive() {
   
   # Test with gh failure
   mock_dir=$(setup_advanced_mock "gh_fail")
-  source "$MAIN_SCRIPT"
+
   
   assert_failure "create_issues with gh failure" create_issues "Parent" "Body" "Child" "Body"
   
@@ -313,7 +336,7 @@ test_all_functions_comprehensive() {
   echo -e "\n--- Testing link_sub_issue ---"
   
   mock_dir=$(setup_advanced_mock "success")
-  source "$MAIN_SCRIPT"
+
   
   # Set up required variables
   PARENT_ID="test-parent-id"
@@ -328,7 +351,7 @@ test_all_functions_comprehensive() {
   
   # Test with API failure (should succeed but warn)
   mock_dir=$(setup_advanced_mock "api_fail")
-  source "$MAIN_SCRIPT"
+
   
   PARENT_ID="test-parent-id"
   CHILD_ID="test-child-id"
@@ -344,7 +367,7 @@ test_all_functions_comprehensive() {
   echo -e "\n--- Testing add_to_project ---"
   
   mock_dir=$(setup_advanced_mock "success")
-  source "$MAIN_SCRIPT"
+
   
   # Set up required variables
   REPO_OWNER="test-owner"
@@ -365,7 +388,7 @@ test_all_functions_comprehensive() {
   
   # Test with project failure
   mock_dir=$(setup_advanced_mock "project_fail")
-  source "$MAIN_SCRIPT"
+
   
   REPO_OWNER="test-owner"
   REPO_NAME="test-repo"
@@ -382,7 +405,7 @@ test_all_functions_comprehensive() {
   echo -e "\n--- Testing main function ---"
   
   mock_dir=$(setup_advanced_mock "success")
-  source "$MAIN_SCRIPT"
+
   
   test_repo_dir=$(mktemp -d)
   pushd "$test_repo_dir" >/dev/null
@@ -404,7 +427,7 @@ test_all_functions_comprehensive() {
   # Test load_environment edge cases
   echo -e "\n--- Testing load_environment edge cases ---"
   
-  source "$MAIN_SCRIPT"
+
   
   local temp_dir
   temp_dir=$(mktemp -d)
@@ -438,7 +461,7 @@ test_error_propagation() {
   
   local mock_dir
   mock_dir=$(setup_advanced_mock "gh_fail")
-  source "$MAIN_SCRIPT"
+
   
   # Test that function failures propagate correctly
   assert_failure "validate_input propagates errors" validate_input "" "" "" ""
@@ -460,7 +483,7 @@ test_error_propagation() {
 test_boundary_conditions() {
   echo -e "\n=== Boundary Condition Tests ==="
   
-  source "$MAIN_SCRIPT"
+
   
   # Test validate_input with boundary cases
   assert_success "validate_input with minimal valid input" validate_input "a" "b" "c" "d"

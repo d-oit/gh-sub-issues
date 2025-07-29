@@ -1,0 +1,4 @@
+instructions:
+  - name: create-github-release
+    description: "Develop GitHub release manager script with version management, changelog generation, and issue linking capabilities."
+    content_file: create-github-release.md
