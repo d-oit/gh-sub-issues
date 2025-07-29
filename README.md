@@ -20,26 +20,51 @@ A robust tool for managing hierarchical issues with GitHub Projects using the of
 ## Prerequisites
 
 - **GitHub CLI v2.40+** with sub-issues feature support
-- **jq** for JSON processing
+- **jq** for JSON processing  
 - **Git repository** with GitHub remote configured
 - **GitHub authentication** (`gh auth login`)
+- **bash** shell environment (Linux, macOS, or WSL on Windows)
+- **bc** calculator for mathematical operations (used in release management)
 
-## Setup
+## Installation
 
-1. **Install dependencies:**
+### Quick Start
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/d-oit/gh-sub-issues.git
+   cd gh-sub-issues
+   ```
+
+2. **Install dependencies:**
    ```bash
    # Install GitHub CLI
    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-   sudo apt update && sudo apt install gh jq
-   ```
+   sudo apt update
+   sudo apt install gh
 
-2. **Configure authentication:**
-   ```bash
+   # Install jq and bc
+   sudo apt-get install jq bc
+
+   # Authenticate with GitHub
    gh auth login
    ```
 
-3. **Optional: Configure environment:**
+3. **Make scripts executable:**
+   ```bash
+   chmod +x gh-issue-manager.sh gh-release-manager.sh
+   ```
+
+4. **Verify installation:**
+   ```bash
+   ./gh-issue-manager.sh --help
+   ./gh-release-manager.sh --help
+   ```
+
+### Configuration
+
+1. **Configure environment (optional):**
    ```bash
    cp .env.example .env
    # Edit .env to set PROJECT_URL if using project boards
