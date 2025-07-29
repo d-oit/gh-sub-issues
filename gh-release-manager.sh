@@ -279,18 +279,23 @@ get_closed_issues_since_last_release() {
 
     local since_date="$1"
     local issues_json
-    if [ -z "$since_date" ]; then
-        log_info "get_closed_issues_since_last_release" "No since_date provided. Fetching all closed issues."
-        issues_json=$(gh issue list --state closed --json number,title,url,labels 2>/dev/null)
-    else
-        issues_json=$(gh issue list --state closed --since "$since_date" --json number,title,url,labels 2>/dev/null)
-    fi
+    
+    # Always fetch all closed issues and filter manually for better reliability
+    log_info "get_closed_issues_since_last_release" "Fetching all closed issues for filtering..."
+    issues_json=$(gh issue list --state closed --json number,title,url,labels,closedAt --limit 100 2>/dev/null)
 
     if [ -z "$issues_json" ] || [ "$issues_json" = "[]" ]; then
-        log_info "get_closed_issues_since_last_release" "No closed issues found since $since_date."
+        log_info "get_closed_issues_since_last_release" "No closed issues found."
         echo ""
         log_timing "get_closed_issues_since_last_release" "$start_time"
         return 0
+    fi
+    
+    # If no since_date provided, return all issues
+    if [ -z "$since_date" ]; then
+        log_info "get_closed_issues_since_last_release" "No since_date provided. Using all closed issues."
+    else
+        log_info "get_closed_issues_since_last_release" "Filtering issues closed after: $since_date"
     fi
 
     local changelog_entries=""
@@ -303,8 +308,24 @@ get_closed_issues_since_last_release() {
         title=$(echo "$issue" | jq -r '.title')
         local url
         url=$(echo "$issue" | jq -r '.url')
+        local closed_at
+        closed_at=$(echo "$issue" | jq -r '.closedAt')
         local labels
         labels=$(echo "$issue" | jq -r '.labels[].name' | paste -s -d, -)
+
+        # Filter by date if since_date is provided
+        if [ -n "$since_date" ]; then
+            # Convert dates to timestamps for comparison
+            local since_timestamp
+            since_timestamp=$(date -d "$since_date" +%s 2>/dev/null || echo "0")
+            local closed_timestamp
+            closed_timestamp=$(date -d "$closed_at" +%s 2>/dev/null || echo "0")
+            
+            if [ "$closed_timestamp" -le "$since_timestamp" ]; then
+                log_debug "get_closed_issues_since_last_release" "Skipping issue #$number (closed before $since_date)"
+                continue
+            fi
+        fi
 
         # Filter out issues with 'skip-changelog' label
         if [[ "$labels" == *"skip-changelog"* ]]; then
@@ -314,6 +335,7 @@ get_closed_issues_since_last_release() {
 
         changelog_entries+="- $title (#$number) [Link]($url)\n"
         issue_count=$((issue_count + 1))
+        log_debug "get_closed_issues_since_last_release" "Added issue #$number to changelog: $title"
     done < <(echo "$issues_json" | jq -c '.[]')
 
     log_info "get_closed_issues_since_last_release" "Found $issue_count issues for changelog."
