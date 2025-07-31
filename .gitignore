@@ -5,3 +5,6 @@ logs/
 GEMINI.md
 SYSTEM.md
 .rovodev/
+test-error-handling.log
+wizard-errors.log
+.kiro/
