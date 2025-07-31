@@ -102,9 +102,136 @@ jobs:
             echo EOF
           } >> $GITHUB_OUTPUT
 
-      - name: Update CHANGELOG.md
+      - name: Generate and update CHANGELOG.md
         run: |
-          echo "${{ steps.release_notes.outputs.content }}" > CHANGELOG.md
+          #!/bin/bash
+          set -euo pipefail
+          
+          # Get the latest tag for comparison
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          
+          echo "Generating changelog for ${{ steps.version.outputs.new_version }} (since $latest_tag)"
+          
+          # Create temporary files for categorizing commits
+          added_file=$(mktemp)
+          changed_file=$(mktemp)
+          fixed_file=$(mktemp)
+          security_file=$(mktemp)
+          deprecated_file=$(mktemp)
+          removed_file=$(mktemp)
+          other_file=$(mktemp)
+          
+          # Get commits since last tag
+          if [ "$latest_tag" != "v0.0.0" ]; then
+            commits=$(git log --pretty=format:"%s" ${latest_tag}..HEAD)
+          else
+            commits=$(git log --pretty=format:"%s")
+          fi
+          
+          # Process each commit and categorize based on conventional commits
+          echo "$commits" | while IFS= read -r commit; do
+            case "$commit" in
+              feat\(*|feat:*)
+                echo "- ${commit#feat*: }" >> "$added_file"
+                ;;
+              fix\(*|fix:*)
+                echo "- ${commit#fix*: }" >> "$fixed_file"
+                ;;
+              security\(*|security:*)
+                echo "- ${commit#security*: }" >> "$security_file"
+                ;;
+              deprecate\(*|deprecate:*|deprecated\(*|deprecated:*)
+                echo "- ${commit#deprecat*: }" >> "$deprecated_file"
+                ;;
+              remove\(*|remove:*|removed\(*|removed:*)
+                echo "- ${commit#remov*: }" >> "$removed_file"
+                ;;
+              docs\(*|docs:*|chore\(*|chore:*|refactor\(*|refactor:*|perf\(*|perf:*|style\(*|style:*|test\(*|test:*)
+                echo "- ${commit}" >> "$changed_file"
+                ;;
+              *)
+                echo "- ${commit}" >> "$other_file"
+                ;;
+            esac
+          done
+          
+          # Create the new changelog entry
+          {
+            echo "## [${{ steps.version.outputs.new_version }}] - $(date +%Y-%m-%d)"
+            echo ""
+          } > new_entry.md
+          
+          # Add categorized changes following Keep a Changelog format
+          for category in "Added:$added_file" "Changed:$changed_file" "Deprecated:$deprecated_file" "Removed:$removed_file" "Fixed:$fixed_file" "Security:$security_file"; do
+            category_name="${category%:*}"
+            file_path="${category#*:}"
+            
+            if [ -s "$file_path" ]; then
+              echo "### $category_name" >> new_entry.md
+              echo "" >> new_entry.md
+              cat "$file_path" >> new_entry.md
+              echo "" >> new_entry.md
+            fi
+          done
+          
+          # Add other changes if any
+          if [ -s "$other_file" ]; then
+            echo "### Other Changes" >> new_entry.md
+            echo "" >> new_entry.md
+            cat "$other_file" >> new_entry.md
+            echo "" >> new_entry.md
+          fi
+          
+          # Create or update the complete changelog
+          {
+            echo "# Changelog"
+            echo ""
+            echo "All notable changes to this project will be documented in this file."
+            echo ""
+            echo "The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),"
+            echo "and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."
+            echo ""
+          } > CHANGELOG.md
+          
+          # Add the new entry
+          cat new_entry.md >> CHANGELOG.md
+          
+          # Preserve existing changelog entries if they exist
+          if git show HEAD:CHANGELOG.md >/dev/null 2>&1; then
+            # Get existing entries (skip header and current version if it exists)
+            git show HEAD:CHANGELOG.md | sed -n '/^## \[/,$p' | grep -v "^## \[${{ steps.version.outputs.new_version }}\]" >> CHANGELOG.md 2>/dev/null || true
+          fi
+          
+          # Add version links at the bottom
+          echo "" >> CHANGELOG.md
+          
+          # Get all tags for version links
+          all_tags=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          if [ -n "$all_tags" ]; then
+            prev_tag=""
+            echo "$all_tags" | while IFS= read -r tag; do
+              version="${tag#v}"
+              if [ -z "$prev_tag" ]; then
+                # First tag (latest) - compare with HEAD
+                echo "[$version]: https://github.com/${{ github.repository }}/compare/$tag...HEAD" >> CHANGELOG.md
+              else
+                # Compare with previous tag
+                echo "[$version]: https://github.com/${{ github.repository }}/compare/$tag...$prev_tag" >> CHANGELOG.md
+              fi
+              prev_tag="$tag"
+            done
+            
+            # Add link for the oldest version
+            if [ -n "$prev_tag" ]; then
+              oldest_version="${prev_tag#v}"
+              echo "[$oldest_version]: https://github.com/${{ github.repository }}/releases/tag/$prev_tag" >> CHANGELOG.md
+            fi
+          fi
+          
+          # Cleanup temporary files
+          rm -f "$added_file" "$changed_file" "$fixed_file" "$security_file" "$deprecated_file" "$removed_file" "$other_file" new_entry.md
+          
+          echo "CHANGELOG.md generated successfully"
 
       - name: Commit and push CHANGELOG.md
         run: |
