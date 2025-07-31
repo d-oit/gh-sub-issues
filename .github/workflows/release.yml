@@ -129,11 +129,12 @@ jobs:
           #!/bin/bash
           set -euo pipefail
 
-          # Extract issue numbers from release notes
-          issue_numbers=$(echo "$RELEASE_NOTES" | grep -oP '#\d+' | sed 's/#//' | sort -u)
+          # Extract issue numbers from release notes (using basic grep instead of -P for compatibility)
+          issue_numbers=$(echo "$RELEASE_NOTES" | grep -o '#[0-9]\+' | sed 's/#//' | sort -u || true)
 
           if [ -z "$issue_numbers" ]; then
-            echo "No issues found in release notes."
+            echo "No issues found in release notes to process."
+            echo "This is normal for releases that don't reference specific issues."
             exit 0
           fi
 
@@ -142,7 +143,12 @@ jobs:
           for issue_number in $issue_numbers; do
             echo "Processing issue #$issue_number"
 
-            # Check if issue is open
+            # Check if issue exists and is open
+            if ! gh issue view "$issue_number" --json state -q .state >/dev/null 2>&1; then
+              echo "Issue #$issue_number does not exist, skipping."
+              continue
+            fi
+
             issue_state=$(gh issue view "$issue_number" --json state -q .state)
             if [ "$issue_state" != "OPEN" ]; then
               echo "Issue #$issue_number is not open, skipping."
@@ -150,9 +156,11 @@ jobs:
             fi
 
             # Add label, comment and close issue
-            gh issue edit "$issue_number" --add-label "released"
-            gh issue comment "$issue_number" --body "🎉 This issue has been released in version $RELEASE_VERSION."
-            gh issue close "$issue_number"
+            gh issue edit "$issue_number" --add-label "released" || echo "Failed to add label to issue #$issue_number"
+            gh issue comment "$issue_number" --body "🎉 This issue has been released in version $RELEASE_VERSION." || echo "Failed to comment on issue #$issue_number"
+            gh issue close "$issue_number" || echo "Failed to close issue #$issue_number"
 
             echo "Processed issue #$issue_number"
           done
+
+          echo "Issue processing completed."
