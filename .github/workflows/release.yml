@@ -77,30 +77,30 @@ jobs:
 
       - name: Generate release notes
         id: release_notes
-        uses: orhun/git-cliff-action@v2
-        with:
-          config: |
-            [changelog]
-            header = """
-            # Changelog
-            """
-            body = """
-            {% if version %}
-                ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
-            {% else %}
-                ## [unreleased]
-            {% endif %}
-            {% for group, commits in commits | group_by(attribute="group") %}
-                ### {{ group | upper_first }}
-                {% for commit in commits %}
-                    - {{ commit.message | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`](https://github.com/${{ github.repository }}/commit/{{ commit.id }}))
-                {% endfor %}
-            {% endfor %}
-            """
-            footer = ""
-          tag: ${{ steps.version.outputs.new_version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the latest tag
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          
+          # Generate release notes from commits since last tag
+          echo "## What's Changed" > release_notes.md
+          echo "" >> release_notes.md
+          
+          # Get commits since last tag
+          if [ "$latest_tag" != "v0.0.0" ]; then
+            git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" ${latest_tag}..HEAD >> release_notes.md
+          else
+            git log --pretty=format:"- %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${latest_tag}...${{ steps.version.outputs.new_version }}" >> release_notes.md
+          
+          # Set output
+          {
+            echo 'content<<EOF'
+            cat release_notes.md
+            echo EOF
+          } >> $GITHUB_OUTPUT
 
       - name: Update CHANGELOG.md
         run: |
