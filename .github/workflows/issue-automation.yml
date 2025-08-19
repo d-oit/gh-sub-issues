@@ -87,7 +87,6 @@ jobs:
     - name: Handle sub-issue creation requests
       if: contains(github.event.comment.body, '/create-sub-issues')
       run: |
-        comment_body="${{ github.event.comment.body }}"
         issue_number="${{ github.event.issue.number }}"
         
         # Extract sub-issue information from comment
@@ -108,3 +107,4 @@ jobs:
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        comment_body: ${{ github.event.comment.body }}
